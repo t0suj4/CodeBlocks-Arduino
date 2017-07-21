@@ -14,7 +14,7 @@
 // "      "             as a target option
 // added support for Leonardo & ATtiny chips to SetupProject
 // added cpu_freq to other boards in SetupProject
-// 
+//
 // changed pb_avrsize to use python script to evaluate memory constraints and provide meaningful report
 // added max_size & max_sram to AddCompilerOption & supported chips
 //
@@ -27,7 +27,7 @@
 //    -- for Attiny boards, the protocol = programmer. This value is used for those boards
 //
 // Jan 15/2013:
-//  UPDATE: these changes have been disabled for now. The archive post-proc line does not know 
+//  UPDATE: these changes have been disabled for now. The archive post-proc line does not know
 //          about linked libraries, so it can't be used for anything but simple projects
 //  Fixed linker problem preventing correct code generation for ATtiny chips
 //    -- added option for Arduino compatible linking
@@ -157,14 +157,20 @@ function AddSourceFile(project, targetName, filename)
 function AddCoreSourceCode(project, targetName)
 {
 		AddSourceFile(project, targetName, _T("cores/WString.cpp"));
+		AddSourceFile(project, targetName, _T("cores/abi.cpp"));
+		AddSourceFile(project, targetName, _T("cores/hooks.c"));
 		AddSourceFile(project, targetName, _T("cores/WMath.cpp"));
 		AddSourceFile(project, targetName, _T("cores/wiring.c"));
 		AddSourceFile(project, targetName, _T("cores/wiring_digital.c"));
 		AddSourceFile(project, targetName, _T("cores/wiring_analog.c"));
 		AddSourceFile(project, targetName, _T("cores/wiring_pulse.c"));
+		AddSourceFile(project, targetName, _T("cores/wiring_pulse_asm.S"));
 		AddSourceFile(project, targetName, _T("cores/wiring_shift.c"));
-		AddSourceFile(project, targetName, _T("cores/HID.cpp"));
 		AddSourceFile(project, targetName, _T("cores/HardwareSerial.cpp"));
+		AddSourceFile(project, targetName, _T("cores/HardwareSerial0.cpp"));
+		AddSourceFile(project, targetName, _T("cores/HardwareSerial1.cpp"));
+		AddSourceFile(project, targetName, _T("cores/HardwareSerial2.cpp"));
+		AddSourceFile(project, targetName, _T("cores/HardwareSerial3.cpp"));
 		AddSourceFile(project, targetName, _T("cores/new.cpp"));
 		AddSourceFile(project, targetName, _T("cores/Print.cpp"));
 		AddSourceFile(project, targetName, _T("cores/Stream.cpp"));
@@ -173,6 +179,7 @@ function AddCoreSourceCode(project, targetName)
 		AddSourceFile(project, targetName, _T("cores/WInterrupts.c"));
 		AddSourceFile(project, targetName, _T("cores/CDC.cpp"));
 		AddSourceFile(project, targetName, _T("cores/IPAddress.cpp"));
+		AddSourceFile(project, targetName, _T("cores/PluggableUSB.cpp"));
 		AddSourceFile(project, targetName, _T("cores/main.cpp"));
 		AddSourceFile(project, targetName, _T("libraries/libraries.cpp"));
 		AddSourceFile(project, targetName, _T("sketch.cpp"));
@@ -208,7 +215,7 @@ function CreateTarget(project, targetName, processor, variant, protocol, baudrat
 //avrdude -V -C /etc/avrdude.conf -p${MCU} -c${PROTOCOL} -P${UPLOAD_PORT} -b${UPLOAD_BAUDRATE} -D -Uflash:w:${TARGET_OUTPUT_DIR}${TARGET_OUTPUT_BASENAME}.elf.hex:i
 
 
-		
+
     if (!IsNull(target))
         {
 		        // Post build commands
@@ -216,8 +223,8 @@ function CreateTarget(project, targetName, processor, variant, protocol, baudrat
 		        pb_hex = _T("avr-objcopy -O ihex -R .eeprom -R .eesafe $(TARGET_OUTPUT_FILE) $(TARGET_OUTPUT_FILE).hex");
 		        pb_eepbin = _T("avr-objcopy --no-change-warnings -j .eeprom --change-section-lma .eeprom=0 -O binary $(TARGET_OUTPUT_FILE) $(TARGET_OUTPUT_FILE).eep.bin");
 		        pb_bin = _T("avr-objcopy -O binary -R .eeprom -R .eesafe $(TARGET_OUTPUT_FILE) $(TARGET_OUTPUT_FILE).bin");
-		        
-            // arduino linking commands		
+
+            // arduino linking commands
             if (AvrArduinoLink)
             {
               // create the core library object
@@ -238,7 +245,7 @@ function CreateTarget(project, targetName, processor, variant, protocol, baudrat
 		            pb_lss = _T("cmd /c \"avr-objdump -h --source --demangle --wide $(TARGET_OUTPUT_FILE) > $(TARGET_OUTPUT_FILE).lss\""); // options were -h -S
 		        else
 		            pb_lss = _T("avr-objdump -h --source --demangle --wide $(TARGET_OUTPUT_FILE) > $(TARGET_OUTPUT_FILE).lss"); // options were -h -S
-		
+
 		        // avr-size is compiled with patches under winavr to produce a fancy output
 		        // which displays the percentage of memory used by the application for the
 		        // target mcu. However, this option is not available under standard binutils
@@ -250,16 +257,16 @@ function CreateTarget(project, targetName, processor, variant, protocol, baudrat
                 // call python func to calc size constraints
                 pb_avrsize = _T("avr-size -A $(TARGET_OUTPUT_FILE) >> \"" + HelpersDir + "/avrsize_dump.txt\"; python \"" + HelpersDir + "/test_avr_size.py\" -f \"" + HelpersDir + "/avrsize_dump.txt\" -m $(MAX_SIZE) -s $(MAX_SRAM)");
             }
-		
+
 		        // Setup the linker options
 		        lo_map = _T("-Wl,-Map=$(TARGET_OUTPUT_FILE).map,--cref");
-		
+
 		        // Get external memory start address
 		        lo_extmem = _T("-Wl,--section-start=.data=") + AvrExtMemAddr;
-		
+
 				    // Project compiler options
 		        target.AddCompilerOption(_T("-mmcu=$(MCU)"));
-		        
+
             // create the processor compiler flag algorithmically - form: __AVR_ATxxxxx__
             // slice doesn't appear to work in codeblocks. We'll have to do it the hard way! - sdd
             //target.AddCompilerOption("-D__AVR_AT" + processor.slice(2) + "__");
@@ -282,27 +289,27 @@ function CreateTarget(project, targetName, processor, variant, protocol, baudrat
 		        } else if (processor.Matches(_T("attiny84"))) {
 							target.AddCompilerOption(_T("-D__AVR_ATtiny84__"));
 		        }
-            
 
-		        
 
-		       	target.AddIncludeDir(_T("$(ARDUINO_DIR)/hardware/arduino/cores/arduino"));
+
+
+                target.AddIncludeDir(_T("$(ARDUINO_DIR)/hardware/arduino/avr/cores/arduino"));
 						target.AddIncludeDir(_T("$(ARDUINO_DIR)/libraries"));
             if (SketchesDir) {
            		target.AddIncludeDir(_T("$(SKETCH_DIR)/hardware/attiny/variants/" + variant));
             }
-         		target.AddIncludeDir(_T("$(ARDUINO_DIR)/hardware/arduino/variants/" + variant));
-         		target.AddIncludeDir(_T("$(SKETCH_DIR)/libraries"));
-		
+                target.AddIncludeDir(_T("$(ARDUINO_DIR)/hardware/arduino/avr/variants/" + variant));
+                target.AddIncludeDir(_T("$(SKETCH_DIR)/libraries"));
+
 		        // Project linker options
 		        target.AddLinkerOption(_T("-mmcu=$(MCU)"));
-		
+
 		        if (AvrMap)
 		            target.AddLinkerOption(lo_map);
-		
+
 		        if (AvrExtMem)
 		            target.AddLinkerOption(lo_extmem);
-		
+
             // replacement linker steps (add to post-build)
             if (AvrArduinoLink)
             {
@@ -314,21 +321,20 @@ function CreateTarget(project, targetName, processor, variant, protocol, baudrat
 						target.AddCommandsAfterBuild(pb_hex);
 						target.AddCommandsAfterBuild(pb_eephex);
 		        target.AddCommandsAfterBuild(pb_avrsize);
-		
+
 		        if ( AvrLss )
 		            target.AddCommandsAfterBuild(pb_lss);
-		            
+
             target.AddLinkerOption(_T("-s"));
 
             OptimizationsOn(target, Wizard.GetCompilerID());
             target.SetTargetType(ttConsoleOnly);
             target.SetTargetFilenameGenerationPolicy(tgfpPlatformDefault, tgfpNone);
             target.SetOutputFilename(Wizard.GetReleaseOutputDir() + Wizard.GetProjectName() + _T(".elf"));
-            
+
             target.SetVar(_T("BOARD"), targetName, false);
             target.SetVar(_T("MCU"), processor, false);
             target.SetVar(_T("UPLOAD_BAUDRATE"), baudrate, false);
-            target.SetVar(_T("UPLOAD_PORT"), AvrPort, false);
             target.SetVar(_T("ARDUINO_DIR"), ArduinoDir, false);
             target.SetVar(_T("SKETCH_DIR"), SketchesDir, false);
             target.SetVar(_T("CPU_FREQ"), cpu_freq, false);
@@ -356,13 +362,13 @@ function CreateTarget(project, targetName, processor, variant, protocol, baudrat
 // ArduinoIDE uses these cmds:
 
 //ArduinoIDE/Leonardo:
-//avrdude -C~/bin/arduino-1.0.1/hardware/tools/avrdude.conf -v -v -v -v -patmega32u4 -cavr109 -P/dev/ttyACM0 -b57600 -D -Uflash:w:/tmp/build54.tmp/sketch_jan17a.cpp.hex:i 
+//avrdude -C~/bin/arduino-1.0.1/hardware/tools/avrdude.conf -v -v -v -v -patmega32u4 -cavr109 -P/dev/ttyACM0 -b57600 -D -Uflash:w:/tmp/build54.tmp/sketch_jan17a.cpp.hex:i
 
 //ArduinoIDE/Uno:
-//avrdude -C~/bin/arduino-1.0.1/hardware/tools/avrdude.conf -v -v -v -v -patmega328p -carduino -P/dev/ttyACM0 -b115200 -D -Uflash:w:/tmp/build54.tmp/sketch_jan17a.cpp.hex:i 
+//avrdude -C~/bin/arduino-1.0.1/hardware/tools/avrdude.conf -v -v -v -v -patmega328p -carduino -P/dev/ttyACM0 -b115200 -D -Uflash:w:/tmp/build54.tmp/sketch_jan17a.cpp.hex:i
 
 //ArduinoIDE/ATtiny84:
-//avrdude -C~/bin/arduino-1.0.1/hardware/tools/avrdude.conf -v -v -v -v -pattiny84 -cusbasp -Pusb -Uflash:w:/tmp/build54.tmp/sketch_jan17a.cpp.hex:i 
+//avrdude -C~/bin/arduino-1.0.1/hardware/tools/avrdude.conf -v -v -v -v -pattiny84 -cusbasp -Pusb -Uflash:w:/tmp/build54.tmp/sketch_jan17a.cpp.hex:i
 
             if (AvrUpload) {
                 local needToSwitchBootloader = variant.Matches(_T("leonardo")) || variant.Matches(_T("micro"));
@@ -370,8 +376,8 @@ function CreateTarget(project, targetName, processor, variant, protocol, baudrat
                     target.AddCommandsAfterBuild(_T("${PYTHON_PATH}python \"" + HelpersDir + "/start_leonardo_bootmode.py\" ${UPLOAD_PORT}"));
                 }
                 // for ATtiny chips, we need to erase the flash memory in order to upload; all others can use the -D option - not sure why
-                local cmd = (variant.Matches(_T("tinyX4")) || variant.Matches(_T("tinyX5")))? _T("avrdude-bin ") : _T("avrdude-bin -D ");
-                target.AddCommandsAfterBuild(cmd + _T(" -V -C \"$(ARDUINO_DIR)/hardware/tools/avr/etc/avrdude.conf\" -p${MCU} -c${PROTOCOL} -P${UPLOAD_PORT} -b${UPLOAD_BAUDRATE} -Uflash:w:${TARGET_OUTPUT_DIR}${TARGET_OUTPUT_BASENAME}.elf.hex:i"));
+                local arg = (variant.Matches(_T("tinyX4")) || variant.Matches(_T("tinyX5")))? _T("") : _T(" -D");
+                target.AddCommandsAfterBuild(_T("\"$(ARDUINO_DIR)/hardware/tools/avr/bin/avrdude\"") + arg + _T(" -V -C \"$(ARDUINO_DIR)/hardware/tools/avr/etc/avrdude.conf\" -p${MCU} -c${PROTOCOL} -P${UPLOAD_PORT} -b${UPLOAD_BAUDRATE} -Uflash:w:${TARGET_OUTPUT_DIR}${TARGET_OUTPUT_BASENAME}.elf.hex:i"));
 
                 if (needToSwitchBootloader) { // exit leonardo bootloader mode by restoring the serial port baudrate
                     target.AddCommandsAfterBuild(_T("${PYTHON_PATH}python \"" + HelpersDir + "/end_leonardo_bootmode.py\" ${UPLOAD_PORT} ${UPLOAD_BAUDRATE}"));
@@ -394,7 +400,7 @@ function CreateTarget(project, targetName, processor, variant, protocol, baudrat
             AddCoreSourceCode(project, targetName);
 
         }
-        
+
 
 }
 
@@ -417,14 +423,17 @@ function SetSimTarget(project, target)
 function SetupProject(project)
 {
 // defined per uC -	project.AddCompilerOption(_T("-DF_CPU=16000000L")); // default
-	project.AddCompilerOption(_T("-DARDUINO=101"));
+	project.AddCompilerOption(_T("-DARDUINO=10803"));
 	project.AddCompilerOption(_T("-fno-exceptions"));
 	project.AddCompilerOption(_T("-ffunction-sections"));
 	project.AddCompilerOption(_T("-fdata-sections"));
-	project.AddCompilerOption(_T("-x c++"));
+	project.AddCompilerOption(_T("-fno-threadsafe-statics"));
 	project.AddCompilerOption(_T("-s"));
+	project.AddCompilerOption(_T("-flto"));
 	project.AddLinkerOption(_T("-Wl,--gc-sections"));
-	
+	project.AddLinkerOption(_T("-flto"));
+	project.AddLinkerOption(_T("-fno-threadsafe-statics"));
+
 	project.AddIncludeDir(_T("."));
 	project.AddIncludeDir(_T("$(ARDUINO_DIR)/libraries/EEPROM"));
 	project.AddIncludeDir(_T("$(ARDUINO_DIR)/libraries/Ethernet"));
@@ -443,7 +452,7 @@ function SetupProject(project)
 	project.AddIncludeDir(_T("$(ARDUINO_DIR)/libraries/TinyGPS"));
 	project.AddIncludeDir(_T("$(ARDUINO_DIR)/libraries/Wire"));
 	project.AddIncludeDir(_T("$(ARDUINO_DIR)/libraries/Wire/utility"));
-	
+
 
 // for info on using arrays, see - http://wiki.codeblocks.org/index.php?title=Scripting_commands
 //  local libIncludes = ::wxArrayString();
@@ -453,6 +462,7 @@ function SetupProject(project)
 //    project.AddCompilerOption(_T("-D"+val+"=1"));
 //  }
 
+    project.AddCompilerOption(_T("-DARDUINO_ARCH_AVR"));
 	project.AddCompilerOption(_T("-DUSE_EEPROM=0"));
 	project.AddCompilerOption(_T("-DUSE_ETHERNET=0"));
 	project.AddCompilerOption(_T("-DUSE_FIRMATA=0"));
@@ -466,7 +476,9 @@ function SetupProject(project)
 	project.AddCompilerOption(_T("-DUSE_STEPPER=0"));
 	project.AddCompilerOption(_T("-DUSE_TINYGPS=0"));
 	project.AddCompilerOption(_T("-DUSE_WIRE=0"));
-	
+
+    project.SetVar(_T("UPLOAD_PORT"), AvrPort, false);
+
 	WarningsOn(project, Wizard.GetCompilerID());
 
 // Data taken from boards.txt, Arduino 1.0.1
@@ -482,7 +494,7 @@ function SetupProject(project)
 
 	CreateTarget(project, _T("Arduino Leonardo"),           _T("atmega32u4"), _T("leonardo"),           _T("avr109"),  _T("57600"),   _T("16000000L"), _T("28672"),  _T("2560"));
 	CreateTarget(project, _T("Arduino Micro"),              _T("atmega32u4"), _T("micro"),              _T("avr109"),  _T("57600"),   _T("16000000L"), _T("28672"),  _T("2560"));
-	
+
 	CreateTarget(project, _T("Arduino Uno"),                _T("atmega328p"), _T("standard"),           _T("arduino"), _T("115200"),  _T("16000000L"), _T("32256"),  _T("2048"));
 	CreateTarget(project, _T("Arduino Duemilanove (328)"),  _T("atmega328p"), _T("standard"),           _T("arduino"), _T("57600"),   _T("16000000L"), _T("30720"),  _T("2048"));
 	CreateTarget(project, _T("Arduino Duemilanove (168)"),  _T("atmega168"),  _T("standard"),           _T("arduino"), _T("19200"),   _T("16000000L"), _T("14336"),  _T("1024"));
@@ -497,7 +509,7 @@ function SetupProject(project)
 
 	CreateTarget(project, _T("Arduino Ethernet"),           _T("atmega328p"), _T("standard"),           _T("arduino"), _T("115200"),  _T("16000000L"), _T("32256"),  _T("2048"));
 	CreateTarget(project, _T("Arduino Lilypad"),            _T("atmega328p"), _T("standard"),           _T("arduino"), _T("57600"),   _T("8000000L"),  _T("30720"),  _T("2048"));
-	
+
 	// Debug build target
 	local target = project.GetBuildTarget(Wizard.GetDebugName());
 	if (!IsNull(target))
@@ -505,7 +517,7 @@ function SetupProject(project)
 	    DebugSymbolsOn(target, Wizard.GetCompilerID());
 			SetSimTarget(project, target);
 	}
-	
+
 	// Release build target
 	target = project.GetBuildTarget(Wizard.GetReleaseName());
 	if (!IsNull(target))
@@ -515,6 +527,6 @@ function SetupProject(project)
 	}
 	project.RenameBuildTarget(0, _T("Simulator - Debug"));
 	project.RenameBuildTarget(1, _T("Simulator - Release"));
-	
+
 	return true;
 }
